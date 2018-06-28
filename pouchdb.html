@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Pouch Sync</title>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+	<link rel="stylesheet" type="text/css" href="estilo.css">
+	<link rel="icon" href="checklist.ico">
+</head>
+<body>
+	<div class="container">
+		<h1 class="row">Lista de tarefas</h1>
+		<div class="row">
+			
+			<form name="form"  id="formulario" class="form-inline">
+				<input type="text" name="tarefa" class="form-control" placeholder="Adicione uma tarefa aqui...">
+				<input type="date" name="date" class="form-control">
+				<input type="time" name="hora" class="form-control">
+				<input type="button" onclick="adicionar()" value="Add" class="btn btn-primary">
+			</form>
+		</div>
+		<br>
+		<div class="row" id="visualizar"></div>
+	</div>
+	<script src="http://cdn.jsdelivr.net/npm/pouchdb@7.0.0/dist/pouchdb.min.js"></script>
+	<script>
+		var db = new PouchDB("tarefas");
+		sincronizacao();
+		visualizar();
+
+		function adicionar() {
+			var tarefa = window.document.form.tarefa.value;
+			var date = window.document.form.date.value;
+			var hora = window.document.form.hora.value;
+
+			db.post({marcado:0, tarefa:tarefa, data:date, hora:hora}).then(function(response){
+				if (response.ok) {
+					visualizar();
+					sincronizacao();
+				}
+			}).catch(function(error){
+				console.error(error);
+			});
+		}
+
+		function visualizar() {
+			db.allDocs({
+				include_docs: true
+			}).then(function(result){
+				var div = document.getElementById("visualizar");
+				var table = gerarTabela(result.rows);
+				div.innerHTML = table;
+			}).catch(function(error){
+				console.error(error);
+			});
+		}
+
+		function gerarTabela(dados) {			
+			var table = '<table class="table"><tbody>';
+			for (var i = 0; i < dados.length; i++) {
+				checkbox = dados[i].doc.marcado == 1 ? "checked": "";
+				table += dados[i].doc.marcado == 1 ? '<tr class="table-success">': '<tr>';
+				table += '<td> <input type="checkbox" onChange="alterar(this)" data-_id="' + dados[i].doc._id + '" name="marcado" value="' + dados[i].doc.marcado + '"'+ checkbox + '> </td>';
+				table += '<td> <input type="text" onChange="alterar(this)" data-_id="' + dados[i].doc._id + '" name="tarefa" value="' + dados[i].doc.tarefa + '"></td>';
+				table += '<td> <input type="date" onChange="alterar(this)" data-_id="' + dados[i].doc._id + '" name="date" value="' + dados[i].doc.data + '"></td>';
+				table += '<td> <input type="time" onChange="alterar(this)" data-_id="' + dados[i].doc._id + '" name="hora" value="' + dados[i].doc.hora + '"></td>';
+				table += '<td> <button  class="close" aria-label="Close" onClick="deletar(this)" data-_id="' + dados[i].doc._id + '"> <span aria-hidden="true">&times;</span></button></td>';
+				table += '</tr>';
+			}
+			table += '</tbody><table>';
+			return table;
+		}
+
+		function alterar(campo) {
+			db.get(campo.dataset._id).then(function(doc){
+				switch(campo.name) {
+					case "marcado":
+						doc.marcado = campo.value == 0 ? 1:0;
+						break;
+					case "tarefa":
+						doc.tarefa = campo.value;
+						break;
+					case "date":
+						doc.data = campo.value;
+						break;
+					case "hora":
+						doc.hora = campo.value;
+						break;
+				}
+				return db.put(doc);
+			}).then(function(response){
+				if (response.ok) {
+					visualizar();
+					sincronizacao();
+				}
+			}).catch(function(error){
+				console.error(error);
+			});		
+		}
+
+		function deletar(campo) {
+			db.get(campo.dataset._id).then(function(doc){
+				return db.remove(doc);
+			}).then(function(response){
+				if (response.ok) {
+					visualizar();
+					sincronizacao();
+				}
+			}).catch(function(error){
+				console.error(error);
+			});	
+		}
+		function sincronizacao() {
+			PouchDB.sync('tarefas', 'http://127.0.0.1:5984/tarefas', {
+			  live: true,
+			  retry: true
+			}).on('change', function (info) {
+			  	visualizar();
+			}).on('paused', function (err) {
+			  console.log(err)
+			}).on('active', function () {
+			  // replicate resumed (e.g. new changes replicating, user went back online)
+			}).on('denied', function (err) {
+			  console.log(err)
+			}).on('complete', function (info) {
+			   
+			}).on('error', function (err) {
+			  console.log(err)
+			});
+		}
+	</script>
+</body>
+</html>
